@@ -9,6 +9,7 @@
 #include <GL/gl.h>
 #include <assert.h>
 #include <time.h>
+#include <stdbool.h>
 
 #ifndef GL_FRAGMENT_SHADER
 #define GL_FRAGMENT_SHADER                0x8B30
@@ -268,6 +269,10 @@ int main(void) {
 		die("Could not create OpenGL context: %s.", SDL_GetError());
 	}
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
 	glCreateShader = (GLCreateShader)SDL_GL_GetProcAddress("glCreateShader");
 	glCreateProgram = (GLCreateProgram)SDL_GL_GetProcAddress("glCreateProgram");
 	glShaderSource = (GLShaderSource)SDL_GL_GetProcAddress("glShaderSource");
@@ -284,6 +289,9 @@ int main(void) {
 	glDeleteProgram = (GLDeleteProgram)SDL_GL_GetProcAddress("glDeleteProgram");
 	glUniform1f = (GLUniform1f)SDL_GL_GetProcAddress("glUniform1f");
 	glGetUniformLocation = (GLGetUniformLocation)SDL_GL_GetProcAddress("glGetUniformLocation");
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 
 	if (!glCreateShader || !glCreateProgram || !glShaderSource || !glGetShaderiv || !glGetShaderInfoLog
 		|| !glUseProgram || !glDeleteShader || !glDeleteProgram || !glUniform1f || !glGetUniformLocation) {
