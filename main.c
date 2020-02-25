@@ -1,9 +1,27 @@
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+#define WINDOWS
+#include <windows.h>
+#endif
 #include <SDL2/SDL.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <GL/gl.h>
 #include <assert.h>
 #include <time.h>
+
+#ifndef GL_FRAGMENT_SHADER
+#define GL_FRAGMENT_SHADER                0x8B30
+#endif
+#ifndef GL_VERTEX_SHADER
+#define GL_VERTEX_SHADER                  0x8B31
+#endif
+#ifndef GL_COMPILE_STATUS
+#define GL_COMPILE_STATUS                 0x8B81
+#endif
+#ifndef GL_LINK_STATUS
+#define GL_LINK_STATUS                    0x8B82
+#endif
 
 static SDL_Window *window;
 static void die(char const *format, ...) {
@@ -14,16 +32,13 @@ static void die(char const *format, ...) {
 	va_end(args);
 	
 	if (window) {
-		if (SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
-									"An error occured",
-									 buf, window) == 0) {
+		if (SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "An error occured", buf, window) == 0) {
 			exit(EXIT_FAILURE);
 			return;
 		}
 	}
 	fprintf(stderr, "%s\n", buf);
-    exit(EXIT_FAILURE);
-	
+	exit(EXIT_FAILURE);
 }
 static void die_nogui(char const *format, ...) {
 	va_list args;
@@ -31,28 +46,26 @@ static void die_nogui(char const *format, ...) {
 	vfprintf(stderr, format, args);
 	va_end(args);
 	fprintf(stderr, "\n");
-    exit(EXIT_FAILURE);
+	exit(EXIT_FAILURE);
 }
 
 typedef GLuint (*GLCreateShader)(GLenum shaderType);
-typedef GLuint (*GLCreateProgram)(void);
-typedef void (*GLShaderSource)(GLuint shader, GLsizei count, const GLchar *const *string, const GLint *length);
+typedef void (*GLShaderSource)(GLuint shader, GLsizei count, const char *const *string, const GLint *length);
 typedef void (*GLCompileShader)(GLuint shader);
 typedef void (*GLGetShaderiv)(GLuint shader, GLenum pname, GLint *params);
-typedef void (*GLGetShaderInfoLog)(GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
+typedef void (*GLGetShaderInfoLog)(GLuint shader, GLsizei maxLength, GLsizei *length, char *infoLog);
 typedef GLuint (*GLCreateProgram)(void);
 typedef void (*GLAttachShader)(GLuint program, GLuint shader);
 typedef void (*GLLinkProgram)(GLuint program);
 typedef void (*GLGetProgramiv)(GLuint program, GLenum pname, GLint *params);
-typedef void (*GLGetProgramInfoLog)(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
+typedef void (*GLGetProgramInfoLog)(GLuint program, GLsizei maxLength, GLsizei *length, char *infoLog);
 typedef void (*GLUseProgram)(GLuint program);
 typedef void (*GLDeleteProgram)(GLuint program);
 typedef void (*GLDeleteShader)(GLuint shader);
 typedef void (*GLUniform1f)(GLint location, float v0);
-typedef GLint (*GLGetUniformLocation)(GLuint program, GLchar const *name);
+typedef GLint (*GLGetUniformLocation)(GLuint program, char const *name);
 
 static GLCreateShader glCreateShader;
-static GLCreateProgram glCreateProgram;
 static GLShaderSource glShaderSource;
 static GLCompileShader glCompileShader;
 static GLGetShaderiv glGetShaderiv;
@@ -246,7 +259,7 @@ int main(void) {
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		die("Could not initialize SDL.");
 	}
-	window = SDL_CreateWindow("AutoArt", 0, 0, 1280, 720, SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN);
+	window = SDL_CreateWindow("AutoArt", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE);
 	if (!window) {
 		die("Could not create window: %s.", SDL_GetError());
 	}
@@ -255,35 +268,30 @@ int main(void) {
 		die("Could not create OpenGL context: %s.", SDL_GetError());
 	}
 
-	#ifdef __GNUC__
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wpedantic"
-	#endif
-	glCreateShader = SDL_GL_GetProcAddress("glCreateShader");
-	glCreateProgram = SDL_GL_GetProcAddress("glCreateProgram");
-	glShaderSource = SDL_GL_GetProcAddress("glShaderSource");
-	glCompileShader = SDL_GL_GetProcAddress("glCompileShader");
-    glGetShaderiv = SDL_GL_GetProcAddress("glGetShaderiv");
-    glGetShaderInfoLog = SDL_GL_GetProcAddress("glGetShaderInfoLog");
-	glCreateProgram = SDL_GL_GetProcAddress("glCreateProgram");
-	glAttachShader = SDL_GL_GetProcAddress("glAttachShader");
-	glLinkProgram = SDL_GL_GetProcAddress("glLinkProgram");
-	glGetProgramiv = SDL_GL_GetProcAddress("glGetProgramiv");
-	glGetProgramInfoLog = SDL_GL_GetProcAddress("glGetProgramInfoLog");
-	glUseProgram = SDL_GL_GetProcAddress("glUseProgram");
-	glDeleteShader = SDL_GL_GetProcAddress("glDeleteShader");
-	glDeleteProgram = SDL_GL_GetProcAddress("glDeleteProgram");
-    glUniform1f = SDL_GL_GetProcAddress("glUniform1f");
-	glGetUniformLocation = SDL_GL_GetProcAddress("glGetUniformLocation");
-	#ifdef __GNUC__
-	#pragma GCC diagnostic pop
-	#endif
+	glCreateShader = (GLCreateShader)SDL_GL_GetProcAddress("glCreateShader");
+	glCreateProgram = (GLCreateProgram)SDL_GL_GetProcAddress("glCreateProgram");
+	glShaderSource = (GLShaderSource)SDL_GL_GetProcAddress("glShaderSource");
+	glCompileShader = (GLCompileShader)SDL_GL_GetProcAddress("glCompileShader");
+	glGetShaderiv = (GLGetShaderiv)SDL_GL_GetProcAddress("glGetShaderiv");
+	glGetShaderInfoLog = (GLGetShaderInfoLog)SDL_GL_GetProcAddress("glGetShaderInfoLog");
+	glCreateProgram = (GLCreateProgram)SDL_GL_GetProcAddress("glCreateProgram");
+	glAttachShader = (GLAttachShader)SDL_GL_GetProcAddress("glAttachShader");
+	glLinkProgram = (GLLinkProgram)SDL_GL_GetProcAddress("glLinkProgram");
+	glGetProgramiv = (GLGetProgramiv)SDL_GL_GetProcAddress("glGetProgramiv");
+	glGetProgramInfoLog = (GLGetProgramInfoLog)SDL_GL_GetProcAddress("glGetProgramInfoLog");
+	glUseProgram = (GLUseProgram)SDL_GL_GetProcAddress("glUseProgram");
+	glDeleteShader = (GLDeleteShader)SDL_GL_GetProcAddress("glDeleteShader");
+	glDeleteProgram = (GLDeleteProgram)SDL_GL_GetProcAddress("glDeleteProgram");
+	glUniform1f = (GLUniform1f)SDL_GL_GetProcAddress("glUniform1f");
+	glGetUniformLocation = (GLGetUniformLocation)SDL_GL_GetProcAddress("glGetUniformLocation");
+
 	if (!glCreateShader || !glCreateProgram || !glShaderSource || !glGetShaderiv || !glGetShaderInfoLog
 		|| !glUseProgram || !glDeleteShader || !glDeleteProgram || !glUniform1f || !glGetUniformLocation) {
 		die("Could not get necessary GL procedures. Your OpenGL is probably outdated.");
 	}
 
 	generate_new_art(&vertex_shader, &fragment_shader, &program);
+	bool fullscreen = false;
 	while (1) {
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
@@ -294,6 +302,10 @@ int main(void) {
 				switch (event.key.keysym.sym) {
 				case SDLK_r:
 					generate_new_art(&vertex_shader, &fragment_shader, &program);
+					break;
+				case SDLK_f:
+					fullscreen = !fullscreen;
+					SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP  : 0);
 					break;
 				}
 			}
@@ -322,3 +334,14 @@ int main(void) {
 	
 	return 0;
 }
+
+#ifdef WINDOWS
+int WinMain(
+  HINSTANCE hInstance,
+  HINSTANCE hPrevInstance,
+  LPSTR     lpCmdLine,
+  int       nShowCmd) {
+  main();
+  return 0;
+}
+#endif

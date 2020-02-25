@@ -1,1 +1,5 @@
 autoart-gl
+*SDL*
+*~
+*.exe
+*.obj
