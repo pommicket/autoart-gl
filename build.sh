@@ -33,6 +33,6 @@ else
 	FLAGS="$DEBUG_FLAGS $ADDITIONAL_FLAGS"
 fi
 
-COMMAND="$CC $FLAGS -o autoart-gl main.c"
+COMMAND="$CC $FLAGS -o autoart main.c"
 echo $COMMAND
 $COMMAND || exit 1
