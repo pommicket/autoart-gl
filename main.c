@@ -121,8 +121,8 @@ static bool fourd;
 
 static void gen_expr(char *buf, size_t complexity) {
 	assert(!*buf);
-	int which = randnum() % 4;
-	if (complexity == 0 || which == 0) {
+	int which = randnum() % 2;
+	if (complexity == 0) {
 		/* constant */
 		which = randnum() % (4+fourd);
 		switch (which) {
@@ -145,9 +145,7 @@ static void gen_expr(char *buf, size_t complexity) {
 		return;
 	}
 	switch (which) {
-	case 0: assert(0); break;
-	case 1:
-	case 2: {
+	case 0: {
 		/* unary */
 		char const *op = NULL;
 		which = randnum() % 4;
@@ -175,8 +173,7 @@ static void gen_expr(char *buf, size_t complexity) {
 			*buf++ = ')';
 		}
 	} break;
-	case 3:
-	case 4: {
+	case 1: {
 		/* binary */
 	    char op = '\0';
 		which = randnum() % 4;
@@ -207,6 +204,19 @@ static void gen_expr(char *buf, size_t complexity) {
 static Uint32 start_time;
 static GLint t_location;
 static GLint w_location;
+typedef enum {
+			  RGB,
+			  HSV
+} ColorSystem;
+static ColorSystem color_system = RGB;
+typedef enum {
+			  MOD,
+			  SIGMOID
+} Normalizer;
+static Normalizer norm = SIGMOID;
+static bool polar = false;
+
+
 static void generate_new_art(GLuint *vertex_shader, GLuint *fragment_shader, GLuint *program) {
 	glDeleteShader(*vertex_shader);
 	glDeleteShader(*fragment_shader);
@@ -220,48 +230,94 @@ static void generate_new_art(GLuint *vertex_shader, GLuint *fragment_shader, GLu
 		"   pos = gl_Vertex.xy;\n"
 		"	gl_Position = gl_Vertex;\n"
 		"}";
-	char const *frag_code_header;
 
-	if (fourd) {
-		frag_code_header = "#version 110\n"
-		"varying vec2 pos;\n"
-		"uniform float t;\n"
-		"uniform float w;\n"
-		"void main() {\n"
-		"	float x = pos.x;\n"
-		"	float y = pos.y;\n"
-		"	gl_FragColor = vec4(mod(";
-	} else {
-		frag_code_header = "#version 110\n"
-		"varying vec2 pos;\n"
-		"uniform float t;\n"
-		"void main() {\n"
-		"	float x = pos.x;\n"
-		"	float y = pos.y;\n"
-			"	gl_FragColor = vec4(mod(";
-	}
-
-	char const *const frag_code_footer = ", 1.0), 1.0);\n"
-		"}";
 
 	static char frag_code[1L<<20] = {0};
 	memset(frag_code, 0, sizeof frag_code);
-	strcpy(frag_code, frag_code_header);
-	char *formula = frag_code + strlen(frag_code);
-	gen_expr(formula, 20);
-    formula += strlen(formula);
-	strcpy(formula, ", 1.0), mod(");
-	formula += strlen(formula);
+	char *s = frag_code;
+	strcpy(s, "#version 110\n"
+		   "varying vec2 pos;\n"
+		   "uniform float t;\n");
+	s += strlen(s);
+	if (fourd) {
+		strcpy(s, "uniform float w;\n");
+		s += strlen(s);
+	}
+	strcpy(s, "float n(float x) {\nreturn ");
+	s += strlen(s);
+	switch (norm)  {
+	case MOD:
+		strcpy(s, "mod(x, 1.0)");
+		break;
+	case SIGMOID:
+		strcpy(s, "1.0/(1.0+exp(-x))");
+		break;
+	}
+	s += strlen(s);
+	strcpy(s, ";\n}");
+	s += strlen(s);
 	
-	gen_expr(formula, 20);
-	formula += strlen(formula);
-	strcpy(formula, ", 1.0), mod(");
-	formula += strlen(formula);
+	strcpy(s, 
+		   "void main() {\n");
+	s += strlen(s);
+	if (polar) {
+		strcpy(s, "float x = length(dot(pos, pos)); // r\n"
+			   "float y = atan(pos.y, pos.x); // theta\n");
+	} else {
+		strcpy(s, 
+			   "float x = pos.x;\n"
+			   "float y = pos.y;\n");
+	}
+	s += strlen(s);
+	strcpy(s, "	vec3 o = vec3(n(");
+	s += strlen(s);
+	
+	
+	gen_expr(s, 10);
+    s += strlen(s);
+	strcpy(s, "), n(");
+	s += strlen(s);
+	
+	gen_expr(s, 10);
+	s += strlen(s);
+	strcpy(s, "), n(");
+	s += strlen(s);
 
-	gen_expr(formula, 20);
-    formula += strlen(formula);
-	
-	strcat(frag_code, frag_code_footer);
+	gen_expr(s, 10);
+    s += strlen(s);
+
+	strcpy(s, "));\n");
+	s += strlen(s);
+	switch (color_system) {
+	case RGB:
+		strcpy(s, "gl_FragColor = vec4(o.xyz, 1.0);\n");
+		break;
+	case HSV:
+		strcpy(s, "float C = o.z * o.y;\n"
+			   "float H = o.x * 6.0;\n"
+			   "float X = C * (1.0-abs(mod(H,2.0)-1.0));\n"
+			   "vec3 rgb = vec3(0.0,0.0,0.0);\n"
+			   "if (H <= 1.0) {\n"
+			   "    rgb = vec3(C,X,0.0);\n"
+			   "} else if (H <= 2.0) {\n"
+			   "	rgb = vec3(X,C,0.0);\n"
+			   "} else if (H <= 3.0) {\n"
+			   "	rgb = vec3(0.0,C,X);\n"
+			   "} else if (H <= 4.0) {\n"
+			   "	rgb = vec3(0.0,X,C);\n"
+			   "} else if (H <= 5.0) {\n"
+			   "	rgb = vec3(X,0.0,C);\n"
+			   "} else {\n"
+			   "	rgb = vec3(C,0.0,X);\n"
+			   "}\n"
+			   "float m = o.z - C;\n"
+			   "gl_FragColor = vec4(rgb + m, 1.0);\n");
+		break;
+	}
+	s += strlen(s);
+
+	strcpy(s, "}\n");
+		
 	puts(frag_code);
 	*vertex_shader = compile_shader(vert_code, GL_VERTEX_SHADER);
 	*fragment_shader = compile_shader(frag_code, GL_FRAGMENT_SHADER);
@@ -337,9 +393,53 @@ int main(void) {
 					fullscreen = !fullscreen;
 					SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP  : 0);
 					break;
+				case SDLK_3:
+					if (fourd) {
+						fourd = false;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
+					break;
 				case SDLK_4:
-					fourd = !fourd;
-					generate_new_art(&vertex_shader, &fragment_shader, &program);
+					if (!fourd) {
+						fourd = true;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
+					break;
+				case SDLK_c:
+					if (polar) {
+						polar = false;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
+					break;
+				case SDLK_p:
+					if (!polar) {
+						polar = true;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
+					break;
+				case SDLK_m:
+					if (norm != MOD) {
+						norm = MOD;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
+					break;
+				case SDLK_s:
+					if (norm != SIGMOID) {
+						norm = SIGMOID;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
+					break;
+				case SDLK_g:
+					if (color_system != RGB) {
+					    color_system = RGB;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
+					break;
+				case SDLK_h:
+					if (color_system != HSV) {
+					    color_system = HSV;
+						generate_new_art(&vertex_shader, &fragment_shader, &program);
+					}
 					break;
 				}
 			}
