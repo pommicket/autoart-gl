@@ -117,12 +117,14 @@ static inline int randnum(void) {
 }
 #define RANDNUM_MAX RAND_MAX
 
+static bool fourd;
+
 static void gen_expr(char *buf, size_t complexity) {
 	assert(!*buf);
-	int which = randnum() % 5;
+	int which = randnum() % 4;
 	if (complexity == 0 || which == 0) {
 		/* constant */
-		which = randnum() % 4;
+		which = randnum() % (4+fourd);
 		switch (which) {
 		case 0:
 			*buf = 'x';
@@ -135,6 +137,9 @@ static void gen_expr(char *buf, size_t complexity) {
 			break;
 		case 3:
 			sprintf(buf, "%.2f", (float)randnum() / (1.0f+(float)RANDNUM_MAX));
+			break;
+		case 4:
+			*buf = 'w';
 			break;
 		}
 		return;
@@ -201,6 +206,7 @@ static void gen_expr(char *buf, size_t complexity) {
 
 static Uint32 start_time;
 static GLint t_location;
+static GLint w_location;
 static void generate_new_art(GLuint *vertex_shader, GLuint *fragment_shader, GLuint *program) {
 	glDeleteShader(*vertex_shader);
 	glDeleteShader(*fragment_shader);
@@ -214,13 +220,26 @@ static void generate_new_art(GLuint *vertex_shader, GLuint *fragment_shader, GLu
 		"   pos = gl_Vertex.xy;\n"
 		"	gl_Position = gl_Vertex;\n"
 		"}";
-	char const *const frag_code_header = "#version 110\n"
+	char const *frag_code_header;
+
+	if (fourd) {
+		frag_code_header = "#version 110\n"
+		"varying vec2 pos;\n"
+		"uniform float t;\n"
+		"uniform float w;\n"
+		"void main() {\n"
+		"	float x = pos.x;\n"
+		"	float y = pos.y;\n"
+		"	gl_FragColor = vec4(mod(";
+	} else {
+		frag_code_header = "#version 110\n"
 		"varying vec2 pos;\n"
 		"uniform float t;\n"
 		"void main() {\n"
 		"	float x = pos.x;\n"
 		"	float y = pos.y;\n"
-		"	gl_FragColor = vec4(mod(";
+			"	gl_FragColor = vec4(mod(";
+	}
 
 	char const *const frag_code_footer = ", 1.0), 1.0);\n"
 		"}";
@@ -229,26 +248,28 @@ static void generate_new_art(GLuint *vertex_shader, GLuint *fragment_shader, GLu
 	memset(frag_code, 0, sizeof frag_code);
 	strcpy(frag_code, frag_code_header);
 	char *formula = frag_code + strlen(frag_code);
-	gen_expr(formula, 15);
+	gen_expr(formula, 20);
     formula += strlen(formula);
 	strcpy(formula, ", 1.0), mod(");
 	formula += strlen(formula);
 	
-	gen_expr(formula, 15);
+	gen_expr(formula, 20);
 	formula += strlen(formula);
 	strcpy(formula, ", 1.0), mod(");
 	formula += strlen(formula);
 
-	gen_expr(formula, 15);
+	gen_expr(formula, 20);
     formula += strlen(formula);
 	
 	strcat(frag_code, frag_code_footer);
+	puts(frag_code);
 	*vertex_shader = compile_shader(vert_code, GL_VERTEX_SHADER);
 	*fragment_shader = compile_shader(frag_code, GL_FRAGMENT_SHADER);
 	GLuint shaders[] = {*vertex_shader, *fragment_shader};
 	*program = link_program(shaders, 2);
 
 	t_location = glGetUniformLocation(*program, "t");
+	if (fourd) w_location = glGetUniformLocation(*program, "w");
 
 }
 
@@ -300,6 +321,7 @@ int main(void) {
 
 	generate_new_art(&vertex_shader, &fragment_shader, &program);
 	bool fullscreen = false;
+	float w = 0.0f;
 	while (1) {
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
@@ -315,10 +337,24 @@ int main(void) {
 					fullscreen = !fullscreen;
 					SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP  : 0);
 					break;
+				case SDLK_4:
+					fourd = !fourd;
+					generate_new_art(&vertex_shader, &fragment_shader, &program);
+					break;
 				}
 			}
 		}
 
+		const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
+
+		if (keyboard_state[SDL_SCANCODE_LEFT]) {
+			w -= 0.1f;
+		}
+
+		if (keyboard_state[SDL_SCANCODE_RIGHT]) {
+			w += 0.1f;
+		}
+		
 		int width, height;
 		SDL_GetWindowSize(window, &width, &height);
 
@@ -329,6 +365,9 @@ int main(void) {
 
 		glUseProgram(program);
 		glUniform1f(t_location, (float)(SDL_GetTicks() - start_time) / 100000.0f);
+		if (fourd) {
+			glUniform1f(w_location, w);
+		}
 		glBegin(GL_QUADS);
 		glColor3f(1.0f, 1.0f, 1.0f);
 		glVertex2f(-1.0f, -1.0f);
